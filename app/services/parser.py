@@ -42,8 +42,11 @@ def parse_csv(contents: bytes) -> List[Dict]:
                         cleaned_txn[key] = value
                 else:
                     cleaned_txn[key] = value
+        
+        return cleaned_transactions
+        
     except (pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeDecodeError) as e:
-        raise ValueError(f"Failed to parse CSV: {str(e)}") from e        return cleaned_transactions
+        raise ValueError(f"Failed to parse CSV: {str(e)}") from e
     
     except Exception as e:
-        raise ValueError(f"Failed to parse CSV: {str(e)}")
+        raise ValueError(f"Failed to parse CSV: {str(e)}") from e
