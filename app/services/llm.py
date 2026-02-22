@@ -8,8 +8,7 @@ class LLMService:
     
     def generate(self, prompt: str) -> str:
         """Generate response from local LLM — implemented in Day 3"""
-        pass
-    
+        raise NotImplementedError("LLM generate() will be implemented in Day 3")    
     def stream(self, prompt: str):
         """Stream response from local LLM — implemented in Day 3"""
         pass

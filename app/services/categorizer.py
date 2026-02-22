@@ -9,8 +9,7 @@ CATEGORY_KEYWORDS = {
     "Entertainment": ["netflix", "spotify", "youtube", "prime", "hotstar", "cinema"],
     "Health": ["pharmacy", "hospital", "clinic", "medplus", "apollo", "doctor"],
     "Rent": ["rent", "maintenance", "society"],
-    "Salary": ["salary", "payroll", "credit"],
-}
+    "Salary": ["salary", "payroll", "salary credit"],}
 
 def categorize_transaction(description: str) -> str:
     """Categorize a transaction based on its description"""

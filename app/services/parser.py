@@ -8,9 +8,13 @@ def parse_csv(contents: bytes) -> List[Dict]:
     Parse bank statement CSV into list of transactions.
     Handles common bank CSV formats.
     """
+    MAX_CSV_SIZE = 10 * 1024 * 1024  # 10 MB limit
+    
+    if len(contents) > MAX_CSV_SIZE:
+        raise ValueError(f"CSV file too large: {len(contents)} bytes exceeds {MAX_CSV_SIZE} byte limit")
+    
     try:
-        df = pd.read_csv(io.BytesIO(contents))
-        
+        df = pd.read_csv(io.BytesIO(contents), encoding="utf-8")        
         # Normalize column names to lowercase
         df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
         
@@ -38,9 +42,8 @@ def parse_csv(contents: bytes) -> List[Dict]:
                         cleaned_txn[key] = value
                 else:
                     cleaned_txn[key] = value
-            cleaned_transactions.append(cleaned_txn)
-        
-        return cleaned_transactions
+    except (pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeDecodeError) as e:
+        raise ValueError(f"Failed to parse CSV: {str(e)}") from e        return cleaned_transactions
     
     except Exception as e:
         raise ValueError(f"Failed to parse CSV: {str(e)}")
