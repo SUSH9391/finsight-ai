@@ -12,14 +12,15 @@ async def upload_csv(file: UploadFile = File(...)):
     # Optional: limit file size (e.g., 10MB)
     MAX_FILE_SIZE = 10 * 1024 * 1024
     
-    contents = await file.read()
     if len(contents) > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail="File size exceeds 10MB limit")
     
     try:
         result = parse_csv(contents)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to parse CSV: {str(e)}")    return {
+        raise HTTPException(status_code=400, detail=f"Failed to parse CSV: {str(e)}")
+    
+    return {
         "message": "File uploaded successfully",
         "filename": file.filename,
         "transactions_count": len(result),
