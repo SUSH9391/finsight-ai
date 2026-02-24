@@ -5,7 +5,6 @@ from app.routers import upload, analysis, chat
 app = FastAPI(
     title="FinSight AI",
     description="AI-powered personal finance advisor",
-    version="0.1.0"
 )
 
 # CORS - allows frontend to talk to backend
@@ -18,9 +17,9 @@ app.add_middleware(
 )
 
 # Register routers
-app.include_router(upload.router, prefix="/api/v1/upload", tags=["Upload"])
-app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["Analysis"])
-app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
+app.include_router(upload.router, prefix="/api/upload", tags=["Upload"])
+app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis"])
+app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 
 @app.get("/health", tags=["Health"])
 def health_check():
