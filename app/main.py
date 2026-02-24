@@ -23,4 +23,4 @@ app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 
 @app.get("/health", tags=["Health"])
 def health_check():
-    return {"status": "ok", "message": "FinSight AI is running 🚀"}
+    return {"status": "ok", "message": "FinSight AI is running "}
