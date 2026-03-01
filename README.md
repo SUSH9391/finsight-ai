@@ -38,3 +38,32 @@ APP_ENV=development
 SECRET_KEY=your-secret-key-here
 DATABASE_URL=sqlite:///./finsight.db
 OLLAMA_BASE_URL=http://localhost:11434
+
+## Notes
+# Make sure venv is activated FIRST
+# Windows
+venv\Scripts\activate
+
+# Mac/Linux
+source venv/bin/activate
+
+# Then install
+pip install -r requirements.txt
+
+uvicorn app.main:app --reload
+
+# Open a SECOND terminal (keep uvicorn running in the first one)
+streamlit run frontend/streamlit_app.py
+```
+✅ Runs on → `http://localhost:8501`
+
+---
+
+### 🗂️ So you need 2 terminals open at all times
+```
+Terminal 1                        Terminal 2
+─────────────────────────────     ─────────────────────────────
+source venv/bin/activate          source venv/bin/activate
+uvicorn app.main:app --reload     streamlit run frontend/streamlit_app.py
+→ http://localhost:8000           → http://localhost:8501
+
