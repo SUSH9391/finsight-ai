@@ -33,8 +33,16 @@ def get_summary():
     Call this on dashboard load after CSV upload.
     """
     transactions = get_stored_transactions()
+    total_income = sum(t["amount"] for t in transactions if t["amount"] > 0)
+    total_expenses = abs(sum(t["amount"] for t in transactions if t["amount"] < 0))
+    net_savings = total_income - total_expenses
     summary = get_spending_summary(transactions)
-    return summary
+    return {
+        "total_income": total_income,
+        "total_expenses": total_expenses,
+        "net_savings": net_savings,
+        **summary
+    }
 
 @router.get("/categories")
 def get_categories():
