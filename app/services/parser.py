@@ -14,7 +14,12 @@ def parse_csv(contents: bytes) -> List[Dict]:
         raise ValueError(f"CSV file too large: {len(contents)} bytes exceeds {MAX_CSV_SIZE} byte limit")
     
     try:
-        df = pd.read_csv(io.BytesIO(contents), encoding="utf-8")        
+        df = pd.read_csv(
+    io.BytesIO(contents),
+    encoding="utf-8",
+    sep=None,
+    engine="python"
+)        
         # Normalize column names to lowercase
         df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
         
@@ -31,10 +36,10 @@ def parse_csv(contents: bytes) -> List[Dict]:
         
         # Final pass: clean any remaining problematic values
         cleaned_transactions = []
+
         for txn in transactions:
             cleaned_txn = {}
             for key, value in txn.items():
-                # Check if value is still a float that could be NaN
                 if isinstance(value, float):
                     if np.isnan(value) or np.isinf(value):
                         cleaned_txn[key] = ""
@@ -42,7 +47,9 @@ def parse_csv(contents: bytes) -> List[Dict]:
                         cleaned_txn[key] = value
                 else:
                     cleaned_txn[key] = value
-        
+
+            cleaned_transactions.append(cleaned_txn)
+
         return cleaned_transactions
         
     except (pd.errors.ParserError, pd.errors.EmptyDataError, UnicodeDecodeError) as e:
@@ -50,3 +57,6 @@ def parse_csv(contents: bytes) -> List[Dict]:
     
     except Exception as e:
         raise ValueError(f"Failed to parse CSV: {str(e)}") from e
+
+
+##parser function is final
