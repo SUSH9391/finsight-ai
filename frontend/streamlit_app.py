@@ -13,10 +13,8 @@ st.set_page_config(
 )
 
 # ─── Session state init ────────────────────────────────
-if "uploaded" not in st.session_state:
-    st.session_state.uploaded = False
-if "summary" not in st.session_state:
-    st.session_state.summary = None
+# No session caching - always fresh data
+pass
 
 # ─── Header ───────────────────────────────────────────
 st.title("💰 FinSight AI")
@@ -27,7 +25,7 @@ st.divider()
 st.markdown("### 📂 Upload your bank statement")
 uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
 
-if uploaded_file and not st.session_state.uploaded:
+if uploaded_file:
     with st.spinner("Uploading and categorizing transactions..."):
         try:
             # Send CSV to FastAPI
@@ -38,13 +36,8 @@ if uploaded_file and not st.session_state.uploaded:
 
             if response.status_code == 200:
                 data = response.json()
-                st.session_state.uploaded = True
                 st.success(f"✅ {data['transactions_count']} transactions uploaded and categorized!")
-
-                # Fetch summary right after upload
-                summary_res = requests.get(f"{API_BASE}/analysis/summary")
-                if summary_res.status_code == 200:
-                    st.session_state.summary = summary_res.json()
+                st.rerun()  # Refresh to show new data
             else:
                 st.error(f"❌ Upload failed: {response.json().get('detail', 'Unknown error')}")
 
@@ -53,10 +46,20 @@ if uploaded_file and not st.session_state.uploaded:
 
 st.divider()
 
-# ─── Dashboard (only shows after upload) ──────────────
-if st.session_state.summary:
-    summary = st.session_state.summary
+# ─── Always fetch fresh data ──────────────────────────
+@st.cache_data(ttl=10)  # Cache 10s but ttl refreshes
+def fetch_summary():
+    try:
+        res = requests.get(f"{API_BASE}/v1/analysis/summary", headers=st.session_state.get('headers', {}))
+        if res.status_code == 200:
+            return res.json()
+        return None
+    except:
+        return None
 
+summary = fetch_summary()
+
+if summary:
     # KPI Metrics
     st.markdown("### 📊 Spending Overview")
     col1, col2, col3, col4 = st.columns(4)
@@ -71,6 +74,22 @@ if st.session_state.summary:
         st.metric("Top Category", summary['top_category'])
 
     st.divider()
+
+    # Embed transactions after upload
+    if st.button("🔄 Embed for Chat (run after upload)"):
+        try:
+            res = requests.post(f"{API_BASE}/v1/chat/embed", headers=st.session_state.get('headers', {}))
+            st.success(res.json()['message'])
+        except:
+            st.error("Embed failed - no auth or no transactions")
+
+    # Chat Component
+    st.markdown("### 🤖 AI Chat")
+    try:
+        from components.chat_component import chat_interface
+        chat_interface(API_BASE, st.session_state.get('jwt_token', ''))
+    except ImportError:
+        st.info("Chat component ready - Phase 5 integration next!")
 
     # Charts row
     col_left, col_right = st.columns(2)
@@ -131,7 +150,7 @@ if st.session_state.summary:
     with f_col1:
         category_filter = st.selectbox(
             "Filter by Category",
-            ["All"] + list(summary.get("category_breakdown", {}).keys())
+            ["All"] + list(summary.get("category_breakdown", {}).keys()) if summary else ["All"]
         )
     with f_col2:
         type_filter = st.selectbox("Filter by Type", ["All", "credit", "debit"])

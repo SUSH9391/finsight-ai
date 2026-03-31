@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinSight AI — System Architecture</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #080c14;
+    --surface: #0d1524;
+    --surface2: #111d30;
+    --border: #1e3050;
+    --accent: #00d4ff;
+    --accent2: #00ff88;
+    --accent3: #ff6b35;
+    --accent4: #a855f7;
+    --text: #e2eaf5;
+    --muted: #4a6080;
+    --warning: #fbbf24;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: 
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .header {
+    position: relative;
+    z-index: 10;
+    padding: 32px 40px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+  .logo span { color: var(--accent); }
+
+  .badge {
+    font-size: 10px;
+    padding: 4px 10px;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 2px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    animation: pulse-border 2s infinite;
+  }
+
+  @keyframes pulse-border {
+    0%, 100% { border-color: var(--accent); box-shadow: 0 0 0 rgba(0,212,255,0); }
+    50% { border-color: var(--accent); box-shadow: 0 0 12px rgba(0,212,255,0.3); }
+  }
+
+  /* Tab navigation */
+  .tabs {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    gap: 0;
+    padding: 0 40px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .tab {
+    padding: 14px 24px;
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    font-family: 'JetBrains Mono', monospace;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+  }
+
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .view { display: none; padding: 32px 40px; position: relative; z-index: 5; }
+  .view.active { display: block; }
+
+  /* ─── SYSTEM FLOW DIAGRAM ─── */
+  .flow-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    padding: 20px 0;
+  }
+
+  .flow-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    width: 100%;
+    max-width: 1100px;
+  }
+
+  .flow-arrow-down {
+    width: 2px;
+    height: 28px;
+    background: linear-gradient(to bottom, var(--muted), var(--accent));
+    position: relative;
+    margin: 0 auto;
+  }
+  .flow-arrow-down::after {
+    content: '▼';
+    position: absolute;
+    bottom: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--accent);
+    font-size: 10px;
+  }
+
+  .node {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px 20px;
+    background: var(--surface);
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 160px;
+    text-align: center;
+  }
+
+  .node:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+
+  .node.user { border-color: var(--accent2); }
+  .node.user:hover { box-shadow: 0 0 20px rgba(0,255,136,0.2); }
+
+  .node.auth { border-color: var(--warning); }
+  .node.auth:hover { box-shadow: 0 0 20px rgba(251,191,36,0.2); }
+
+  .node.api { border-color: var(--accent); }
+  .node.api:hover { box-shadow: 0 0 20px rgba(0,212,255,0.2); }
+
+  .node.service { border-color: var(--accent4); }
+  .node.service:hover { box-shadow: 0 0 20px rgba(168,85,247,0.2); }
+
+  .node.db { border-color: var(--accent3); }
+  .node.db:hover { box-shadow: 0 0 20px rgba(255,107,53,0.2); }
+
+  .node.llm { border-color: var(--accent2); }
+  .node.llm:hover { box-shadow: 0 0 20px rgba(0,255,136,0.2); }
+
+  .node-icon { font-size: 20px; margin-bottom: 6px; }
+  .node-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+  .node-sub {
+    font-size: 9px;
+    color: var(--muted);
+    margin-top: 3px;
+    letter-spacing: 0.5px;
+  }
+
+  .node-tag {
+    position: absolute;
+    top: -9px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 8px;
+    padding: 2px 8px;
+    border-radius: 2px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .tag-get { background: rgba(0,212,255,0.15); color: var(--accent); border: 1px solid var(--accent); }
+  .tag-post { background: rgba(0,255,136,0.15); color: var(--accent2); border: 1px solid var(--accent2); }
+  .tag-free { background: rgba(168,85,247,0.15); color: var(--accent4); border: 1px solid var(--accent4); }
+
+  .flow-label {
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    padding: 0 4px;
+  }
+
+  .h-arrow {
+    color: var(--muted);
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  /* Layer labels */
+  .layer-label {
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 4px 12px;
+    border-left: 2px solid var(--muted);
+    margin: 6px 0;
+    align-self: flex-start;
+    margin-left: 40px;
+  }
+
+  /* ─── ROUTES TABLE ─── */
+  .routes-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    max-width: 1100px;
+  }
+
+  .route-group {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .route-group-header {
+    padding: 12px 16px;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .rg-auth { background: rgba(251,191,36,0.08); border-bottom: 1px solid rgba(251,191,36,0.2); color: var(--warning); }
+  .rg-upload { background: rgba(0,212,255,0.08); border-bottom: 1px solid rgba(0,212,255,0.2); color: var(--accent); }
+  .rg-analysis { background: rgba(168,85,247,0.08); border-bottom: 1px solid rgba(168,85,247,0.2); color: var(--accent4); }
+  .rg-chat { background: rgba(0,255,136,0.08); border-bottom: 1px solid rgba(0,255,136,0.2); color: var(--accent2); }
+
+  .route-row {
+    display: grid;
+    grid-template-columns: 60px 220px 1fr;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    align-items: start;
+    font-size: 11px;
+    transition: background 0.15s;
+  }
+  .route-row:hover { background: rgba(255,255,255,0.02); }
+  .route-row:last-child { border-bottom: none; }
+
+  .method {
+    font-size: 9px;
+    padding: 3px 6px;
+    border-radius: 2px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-align: center;
+    width: fit-content;
+  }
+  .m-post { background: rgba(0,255,136,0.15); color: var(--accent2); }
+  .m-get { background: rgba(0,212,255,0.15); color: var(--accent); }
+  .m-delete { background: rgba(255,107,53,0.15); color: var(--accent3); }
+
+  .route-path { color: var(--text); font-size: 11px; word-break: break-all; }
+  .route-desc { color: var(--muted); font-size: 10px; line-height: 1.5; }
+
+  .when-tag {
+    display: inline-block;
+    font-size: 8px;
+    padding: 1px 6px;
+    border-radius: 2px;
+    margin-top: 4px;
+    letter-spacing: 0.5px;
+  }
+  .when-user { background: rgba(0,212,255,0.1); color: var(--accent); }
+  .when-auto { background: rgba(168,85,247,0.1); color: var(--accent4); }
+
+  /* ─── DB SCHEMA ─── */
+  .db-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    max-width: 1100px;
+  }
+
+  .db-table {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .db-table-header {
+    padding: 10px 16px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .dbt-users { background: rgba(251,191,36,0.1); border-bottom: 1px solid rgba(251,191,36,0.2); color: var(--warning); }
+  .dbt-transactions { background: rgba(0,212,255,0.1); border-bottom: 1px solid rgba(0,212,255,0.2); color: var(--accent); }
+  .dbt-uploads { background: rgba(168,85,247,0.1); border-bottom: 1px solid rgba(168,85,247,0.2); color: var(--accent4); }
+  .dbt-chats { background: rgba(0,255,136,0.1); border-bottom: 1px solid rgba(0,255,136,0.2); color: var(--accent2); }
+  .dbt-budgets { background: rgba(255,107,53,0.1); border-bottom: 1px solid rgba(255,107,53,0.2); color: var(--accent3); }
+  .dbt-categories { background: rgba(100,180,255,0.1); border-bottom: 1px solid rgba(100,180,255,0.2); color: #64b4ff; }
+
+  .col-row {
+    display: grid;
+    grid-template-columns: 28px 1fr 80px;
+    gap: 8px;
+    padding: 7px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    align-items: center;
+    font-size: 10px;
+    transition: background 0.15s;
+  }
+  .col-row:hover { background: rgba(255,255,255,0.02); }
+  .col-row:last-child { border-bottom: none; }
+
+  .col-key { text-align: center; font-size: 11px; }
+  .col-name { color: var(--text); }
+  .col-name .pk { color: var(--warning); }
+  .col-name .fk { color: var(--accent3); }
+  .col-type {
+    font-size: 9px;
+    padding: 2px 6px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 2px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .relation-line {
+    font-size: 10px;
+    color: var(--muted);
+    padding: 6px 16px;
+    border-top: 1px solid var(--border);
+    background: rgba(255,255,255,0.01);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ─── LLM PIPELINE ─── */
+  .llm-flow {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-width: 900px;
+  }
+
+  .pipeline-step {
+    display: grid;
+    grid-template-columns: 40px 1fr 200px;
+    gap: 16px;
+    align-items: start;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 16px;
+    background: var(--surface);
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .pipeline-step::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+  }
+  .ps-1::before { background: var(--accent); }
+  .ps-2::before { background: var(--warning); }
+  .ps-3::before { background: var(--accent4); }
+  .ps-4::before { background: var(--accent2); }
+  .ps-5::before { background: var(--accent3); }
+  .ps-6::before { background: var(--accent); }
+
+  .pipeline-step:hover {
+    border-color: rgba(0,212,255,0.2);
+    transform: translateX(4px);
+  }
+
+  .step-num {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .sn-1 { background: rgba(0,212,255,0.15); color: var(--accent); border: 1px solid var(--accent); }
+  .sn-2 { background: rgba(251,191,36,0.15); color: var(--warning); border: 1px solid var(--warning); }
+  .sn-3 { background: rgba(168,85,247,0.15); color: var(--accent4); border: 1px solid var(--accent4); }
+  .sn-4 { background: rgba(0,255,136,0.15); color: var(--accent2); border: 1px solid var(--accent2); }
+  .sn-5 { background: rgba(255,107,53,0.15); color: var(--accent3); border: 1px solid var(--accent3); }
+  .sn-6 { background: rgba(0,212,255,0.15); color: var(--accent); border: 1px solid var(--accent); }
+
+  .step-content-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+  .step-content-desc { font-size: 10px; color: var(--muted); line-height: 1.6; }
+
+  .step-tech {
+    text-align: right;
+  }
+  .tech-pill {
+    display: inline-block;
+    font-size: 9px;
+    padding: 3px 8px;
+    border-radius: 2px;
+    margin: 2px;
+    letter-spacing: 0.5px;
+  }
+  .tp-blue { background: rgba(0,212,255,0.1); color: var(--accent); border: 1px solid rgba(0,212,255,0.2); }
+  .tp-purple { background: rgba(168,85,247,0.1); color: var(--accent4); border: 1px solid rgba(168,85,247,0.2); }
+  .tp-green { background: rgba(0,255,136,0.1); color: var(--accent2); border: 1px solid rgba(0,255,136,0.2); }
+  .tp-orange { background: rgba(255,107,53,0.1); color: var(--accent3); border: 1px solid rgba(255,107,53,0.2); }
+  .tp-yellow { background: rgba(251,191,36,0.1); color: var(--warning); border: 1px solid rgba(251,191,36,0.2); }
+
+  .connector {
+    display: flex;
+    align-items: center;
+    padding-left: 60px;
+    gap: 8px;
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    margin: -4px 0;
+  }
+  .connector::before {
+    content: '';
+    width: 1px;
+    height: 12px;
+    background: var(--border);
+  }
+
+  /* Section titles */
+  .section-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 18px;
+    font-weight: 800;
+    margin-bottom: 6px;
+    letter-spacing: -0.5px;
+  }
+  .section-sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 24px;
+    letter-spacing: 0.5px;
+  }
+
+  /* Tooltip on hover */
+  .tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1e3050;
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 10px;
+    white-space: nowrap;
+    z-index: 100;
+    color: var(--text);
+  }
+  .node:hover .tooltip { display: block; }
+
+  .legend {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding: 12px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    width: fit-content;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="logo">Fin<span>Sight</span> AI</div>
+    <div style="font-size:10px; color:var(--muted); margin-top:4px; letter-spacing:1px;">SYSTEM ARCHITECTURE — v0.1.0</div>
+  </div>
+  <div class="badge">Production Blueprint</div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="showView('flow')">System Flow</button>
+  <button class="tab" onclick="showView('routes')">API Routes</button>
+  <button class="tab" onclick="showView('schema')">DB Schema</button>
+  <button class="tab" onclick="showView('llm')">LLM Pipeline</button>
+</div>
+
+<!-- ═══════════ SYSTEM FLOW ═══════════ -->
+<div class="view active" id="view-flow">
+  <div class="section-title">System Architecture</div>
+  <div class="section-sub">End-to-end data flow from user action to AI response</div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent2)"></div> User / Frontend</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--warning)"></div> Auth Layer</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div> FastAPI Backend</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent4)"></div> AI Services</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent3)"></div> Databases</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--accent2)"></div> Local LLM</div>
+  </div>
+
+  <div class="flow-container">
+
+    <!-- Row 1: User -->
+    <div class="flow-row">
+      <div class="node user">
+        <div class="node-icon">👤</div>
+        <div class="node-title">USER</div>
+        <div class="node-sub">Streamlit Frontend</div>
+        <div class="tooltip">Uploads CSV • Asks questions • Views charts</div>
+      </div>
+    </div>
+
+    <div class="flow-arrow-down" style="height:30px;"></div>
+
+    <!-- Row 2: Auth -->
+    <div class="flow-row">
+      <div class="node auth">
+        <div class="node-tag tag-post">JWT</div>
+        <div class="node-icon">🔐</div>
+        <div class="node-title">AUTH MIDDLEWARE</div>
+        <div class="node-sub">bcrypt + JWT tokens</div>
+        <div class="tooltip">POST /auth/register • POST /auth/login • Verify Bearer token</div>
+      </div>
+    </div>
+
+    <div class="flow-arrow-down" style="height:30px;"></div>
+
+    <!-- Row 3: FastAPI -->
+    <div class="flow-row">
+      <div class="node api" style="min-width:220px;">
+        <div class="node-icon">⚡</div>
+        <div class="node-title">FASTAPI BACKEND</div>
+        <div class="node-sub">Routers → Services → Response</div>
+        <div class="tooltip">Runs on :8000 — all business logic lives here</div>
+      </div>
+    </div>
+
+    <div class="flow-arrow-down" style="height:20px;"></div>
+
+    <!-- Row 4: Three paths -->
+    <div class="flow-row" style="gap:24px; align-items:flex-start;">
+
+      <!-- Path 1: Upload -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+        <div style="font-size:9px;color:var(--accent);letter-spacing:1px;text-transform:uppercase;">📤 Upload Path</div>
+        <div class="node api" style="min-width:140px;">
+          <div class="node-tag tag-post">POST</div>
+          <div class="node-title">/upload/csv</div>
+          <div class="node-sub">upload.router</div>
+        </div>
+        <div style="font-size:18px;color:var(--muted)">↓</div>
+        <div class="node service">
+          <div class="node-title">parser.py</div>
+          <div class="node-sub">PyMuPDF + Pandas</div>
+        </div>
+        <div style="font-size:18px;color:var(--muted)">↓</div>
+        <div class="node service">
+          <div class="node-title">categorizer.py</div>
+          <div class="node-sub">scikit-learn rules</div>
+        </div>
+        <div style="font-size:18px;color:var(--muted)">↓</div>
+        <div class="node db">
+          <div class="node-icon">🗄️</div>
+          <div class="node-title">SQLite / PostgreSQL</div>
+          <div class="node-sub">transactions table</div>
+        </div>
+      </div>
+
+      <div style="font-size:24px;color:var(--border);padding-top:60px;">│</div>
+
+      <!-- Path 2: Analysis -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+        <div style="font-size:9px;color:var(--accent4);letter-spacing:1px;text-transform:uppercase;">📊 Analysis Path</div>
+        <div class="node api" style="min-width:140px;">
+          <div class="node-tag tag-get">GET</div>
+          <div class="node-title">/analysis/summary</div>
+          <div class="node-sub">analysis.router</div>
+        </div>
+        <div style="font-size:18px;color:var(--muted)">↓</div>
+        <div class="node service">
+          <div class="node-title">Pandas Engine</div>
+          <div class="node-sub">aggregations + stats</div>
+        </div>
+        <div style="font-size:18px;color:var(--muted)">↓</div>
+        <div class="node service">
+          <div class="node-title">Plotly Charts</div>
+          <div class="node-sub">JSON chart data</div>
+        </div>
+        <div style="font-size:18px;color:var(--muted)">↓</div>
+        <div class="node db">
+          <div class="node-icon">📈</div>
+          <div class="node-title">Spending Summary</div>
+          <div class="node-sub">computed response</div>
+        </div>
+      </div>
+
+      <div style="font-size:24px;color:var(--border);padding-top:60px;">│</div>
+
+      <!-- Path 3: Chat/RAG -->
+      <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+        <div style="font-size:9px;color:var(--accent2);letter-spacing:1px;text-transform:uppercase;">💬 RAG Chat Path</div>
+        <div class="node api" style="min-width:140px;">
+          <div class="node-tag tag-post">POST</div>
+          <div class="node-title">/chat/ask</div>
+          <div class="node-sub">chat.router</div>
+        </div>
+        <div style="font-size:18px;color:var(--muted)">↓</div>
+        <div class="node service">
+          <div class="node-title">embeddings.py</div>
+          <div class="node-sub">sentence-transformers</div>
+        </div>
+        <div style="font-size:18px;color:var(--muted)">↓</div>
+        <div class="node service">
+          <div class="node-title">vectorstore.py</div>
+          <div class="node-sub">ChromaDB search</div>
+        </div>
+        <div style="font-size:18px;color:var(--muted)">↓</div>
+        <div class="node llm">
+          <div class="node-icon">🤖</div>
+          <div class="node-title">Ollama (Mistral)</div>
+          <div class="node-sub">localhost:11434</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div style="margin-top:20px; padding:12px 20px; border:1px solid var(--border); border-radius:4px; background:var(--surface); font-size:10px; color:var(--muted); max-width:700px; text-align:center; letter-spacing:0.5px;">
+      💡 All three paths are protected by JWT middleware. ChromaDB and SQLite run locally — zero cloud costs.
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════ API ROUTES ═══════════ -->
+<div class="view" id="view-routes">
+  <div class="section-title">API Routes</div>
+  <div class="section-sub">All endpoints, when to call them, and what they return</div>
+
+  <div class="routes-grid">
+
+    <!-- Auth -->
+    <div class="route-group">
+      <div class="route-group-header rg-auth">🔐 Authentication — <span style="font-size:10px;font-weight:400;opacity:0.7;">/api/v1/auth</span></div>
+      <div class="route-row">
+        <div><span class="method m-post">POST</span></div>
+        <div class="route-path">/auth/register</div>
+        <div class="route-desc">Register new user. Send email + password. Returns user object.<br><span class="when-tag when-user">On signup</span></div>
+      </div>
+      <div class="route-row">
+        <div><span class="method m-post">POST</span></div>
+        <div class="route-path">/auth/login</div>
+        <div class="route-desc">Login. Returns JWT access_token. Store it in frontend session.<br><span class="when-tag when-user">On login</span></div>
+      </div>
+      <div class="route-row">
+        <div><span class="method m-get">GET</span></div>
+        <div class="route-path">/auth/me</div>
+        <div class="route-desc">Get current user profile from JWT token.<br><span class="when-tag when-auto">On app load</span></div>
+      </div>
+      <div class="route-row">
+        <div><span class="method m-post">POST</span></div>
+        <div class="route-path">/auth/logout</div>
+        <div class="route-desc">Invalidate token / clear session.<br><span class="when-tag when-user">On logout click</span></div>
+      </div>
+    </div>
+
+    <!-- Upload -->
+    <div class="route-group">
+      <div class="route-group-header rg-upload">📤 Upload — <span style="font-size:10px;font-weight:400;opacity:0.7;">/api/v1/upload</span></div>
+      <div class="route-row">
+        <div><span class="method m-post">POST</span></div>
+        <div class="route-path">/upload/csv</div>
+        <div class="route-desc">Upload bank statement CSV. Returns parsed transactions preview + count.<br><span class="when-tag when-user">On file drop</span></div>
+      </div>
+      <div class="route-row">
+        <div><span class="method m-get">GET</span></div>
+        <div class="route-path">/upload/history</div>
+        <div class="route-desc">List all previously uploaded files for this user.<br><span class="when-tag when-auto">On dashboard load</span></div>
+      </div>
+      <div class="route-row">
+        <div><span class="method m-delete">DELETE</span></div>
+        <div class="route-path">/upload/{upload_id}</div>
+        <div class="route-desc">Delete an uploaded file and its transactions.<br><span class="when-tag when-user">On delete click</span></div>
+      </div>
+    </div>
+
+    <!-- Analysis -->
+    <div class="route-group">
+      <div class="route-group-header rg-analysis">📊 Analysis — <span style="font-size:10px;font-weight:400;opacity:0.7;">/api/v1/analysis</span></div>
+      <div class="route-row">
+        <div><span class="method m-get">GET</span></div>
+        <div class="route-path">/analysis/summary</div>
+        <div class="route-desc">Total income, expenses, savings, top categories. Core dashboard data.<br><span class="when-tag when-auto">On dashboard load</span></div>
+      </div>
+      <div class="route-row">
+        <div><span class="method m-get">GET</span></div>
+        <div class="route-path">/analysis/categories</div>
+        <div class="route-desc">Spending breakdown per category with % share and totals.<br><span class="when-tag when-auto">For pie chart</span></div>
+      </div>
+      <div class="route-row">
+        <div><span class="method m-get">GET</span></div>
+        <div class="route-path">/analysis/monthly</div>
+        <div class="route-desc">Month-over-month income vs expense trend data for line chart.<br><span class="when-tag when-auto">For trend chart</span></div>
+      </div>
+      <div class="route-row">
+        <div><span class="method m-get">GET</span></div>
+        <div class="route-path">/analysis/transactions</div>
+        <div class="route-desc">Paginated list of all transactions with filters (category, date range).<br><span class="when-tag when-user">On filter change</span></div>
+      </div>
+    </div>
+
+    <!-- Chat -->
+    <div class="route-group">
+      <div class="route-group-header rg-chat">💬 AI Chat — <span style="font-size:10px;font-weight:400;opacity:0.7;">/api/v1/chat</span></div>
+      <div class="route-row">
+        <div><span class="method m-post">POST</span></div>
+        <div class="route-path">/chat/ask</div>
+        <div class="route-desc">Ask AI a natural language question. RAG retrieves context → Mistral responds.<br><span class="when-tag when-user">On message send</span></div>
+      </div>
+      <div class="route-row">
+        <div><span class="method m-get">GET</span></div>
+        <div class="route-path">/chat/history</div>
+        <div class="route-desc">Fetch past Q&A sessions for this user from DB.<br><span class="when-tag when-auto">On chat open</span></div>
+      </div>
+      <div class="route-row">
+        <div><span class="method m-post">POST</span></div>
+        <div class="route-path">/chat/embed</div>
+        <div class="route-desc">Trigger embedding of uploaded transactions into ChromaDB. Called after upload.<br><span class="when-tag when-auto">Auto after upload</span></div>
+      </div>
+      <div class="route-row">
+        <div><span class="method m-delete">DELETE</span></div>
+        <div class="route-path">/chat/history</div>
+        <div class="route-desc">Clear all chat history for current user.<br><span class="when-tag when-user">On clear button</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="margin-top:20px; display:flex; gap:12px; font-size:10px; color:var(--muted);">
+    <div>🔒 All routes except <code style="color:var(--accent)">/auth/register</code> and <code style="color:var(--accent)">/auth/login</code> require <code style="color:var(--warning)">Authorization: Bearer &lt;token&gt;</code> header</div>
+  </div>
+</div>
+
+<!-- ═══════════ DB SCHEMA ═══════════ -->
+<div class="view" id="view-schema">
+  <div class="section-title">Database Schema</div>
+  <div class="section-sub">SQLite for development → PostgreSQL for production</div>
+
+  <div class="db-grid">
+
+    <!-- Users -->
+    <div class="db-table">
+      <div class="db-table-header dbt-users">👤 users <span style="font-size:9px;opacity:0.6;">AUTH</span></div>
+      <div class="col-row"><div class="col-key">🔑</div><div class="col-name"><span class="pk">id</span></div><div class="col-type">INTEGER PK</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">email</div><div class="col-type">VARCHAR UNIQUE</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">hashed_password</div><div class="col-type">VARCHAR</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">full_name</div><div class="col-type">VARCHAR</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">is_active</div><div class="col-type">BOOLEAN</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">created_at</div><div class="col-type">DATETIME</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">updated_at</div><div class="col-type">DATETIME</div></div>
+    </div>
+
+    <!-- Uploads -->
+    <div class="db-table">
+      <div class="db-table-header dbt-uploads">📁 uploads <span style="font-size:9px;opacity:0.6;">FILE TRACKING</span></div>
+      <div class="col-row"><div class="col-key">🔑</div><div class="col-name"><span class="pk">id</span></div><div class="col-type">INTEGER PK</div></div>
+      <div class="col-row"><div class="col-key">🔗</div><div class="col-name"><span class="fk">user_id</span></div><div class="col-type">FK → users</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">filename</div><div class="col-type">VARCHAR</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">file_path</div><div class="col-type">VARCHAR</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">row_count</div><div class="col-type">INTEGER</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">is_embedded</div><div class="col-type">BOOLEAN</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">uploaded_at</div><div class="col-type">DATETIME</div></div>
+    </div>
+
+    <!-- Transactions -->
+    <div class="db-table">
+      <div class="db-table-header dbt-transactions">💳 transactions <span style="font-size:9px;opacity:0.6;">CORE</span></div>
+      <div class="col-row"><div class="col-key">🔑</div><div class="col-name"><span class="pk">id</span></div><div class="col-type">INTEGER PK</div></div>
+      <div class="col-row"><div class="col-key">🔗</div><div class="col-name"><span class="fk">user_id</span></div><div class="col-type">FK → users</div></div>
+      <div class="col-row"><div class="col-key">🔗</div><div class="col-name"><span class="fk">upload_id</span></div><div class="col-type">FK → uploads</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">date</div><div class="col-type">DATE</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">description</div><div class="col-type">TEXT</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">amount</div><div class="col-type">FLOAT</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">type</div><div class="col-type">ENUM credit/debit</div></div>
+      <div class="col-row"><div class="col-key">🔗</div><div class="col-name"><span class="fk">category_id</span></div><div class="col-type">FK → categories</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">created_at</div><div class="col-type">DATETIME</div></div>
+    </div>
+
+    <!-- Categories -->
+    <div class="db-table">
+      <div class="db-table-header dbt-categories">🏷️ categories <span style="font-size:9px;opacity:0.6;">LOOKUP</span></div>
+      <div class="col-row"><div class="col-key">🔑</div><div class="col-name"><span class="pk">id</span></div><div class="col-type">INTEGER PK</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">name</div><div class="col-type">VARCHAR UNIQUE</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">icon</div><div class="col-type">VARCHAR</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">color</div><div class="col-type">VARCHAR</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">is_income</div><div class="col-type">BOOLEAN</div></div>
+      <div class="relation-line">🔗 Referenced by transactions.category_id</div>
+    </div>
+
+    <!-- Chat history -->
+    <div class="db-table">
+      <div class="db-table-header dbt-chats">💬 chat_history <span style="font-size:9px;opacity:0.6;">AI MEMORY</span></div>
+      <div class="col-row"><div class="col-key">🔑</div><div class="col-name"><span class="pk">id</span></div><div class="col-type">INTEGER PK</div></div>
+      <div class="col-row"><div class="col-key">🔗</div><div class="col-name"><span class="fk">user_id</span></div><div class="col-type">FK → users</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">session_id</div><div class="col-type">VARCHAR UUID</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">question</div><div class="col-type">TEXT</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">answer</div><div class="col-type">TEXT</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">sources</div><div class="col-type">JSON</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">created_at</div><div class="col-type">DATETIME</div></div>
+    </div>
+
+    <!-- Budgets -->
+    <div class="db-table">
+      <div class="db-table-header dbt-budgets">🎯 budgets <span style="font-size:9px;opacity:0.6;">GOALS</span></div>
+      <div class="col-row"><div class="col-key">🔑</div><div class="col-name"><span class="pk">id</span></div><div class="col-type">INTEGER PK</div></div>
+      <div class="col-row"><div class="col-key">🔗</div><div class="col-name"><span class="fk">user_id</span></div><div class="col-type">FK → users</div></div>
+      <div class="col-row"><div class="col-key">🔗</div><div class="col-name"><span class="fk">category_id</span></div><div class="col-type">FK → categories</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">monthly_limit</div><div class="col-type">FLOAT</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">month</div><div class="col-type">VARCHAR (YYYY-MM)</div></div>
+      <div class="col-row"><div class="col-key"></div><div class="col-name">created_at</div><div class="col-type">DATETIME</div></div>
+    </div>
+
+  </div>
+
+  <div style="margin-top:20px; padding:12px 16px; background:var(--surface); border:1px solid var(--border); border-radius:4px; font-size:10px; color:var(--muted); max-width:700px;">
+    <div style="color:var(--text);font-family:'Syne',sans-serif;font-weight:700;margin-bottom:6px;">🔗 Relationships</div>
+    users (1) → (many) transactions &nbsp;|&nbsp; users (1) → (many) uploads &nbsp;|&nbsp; users (1) → (many) chat_history<br>
+    uploads (1) → (many) transactions &nbsp;|&nbsp; categories (1) → (many) transactions &nbsp;|&nbsp; users (1) → (many) budgets
+  </div>
+</div>
+
+<!-- ═══════════ LLM PIPELINE ═══════════ -->
+<div class="view" id="view-llm">
+  <div class="section-title">LLM / RAG Pipeline</div>
+  <div class="section-sub">How a user question becomes an AI answer — step by step</div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:32px; max-width:1100px;">
+
+    <div>
+      <div style="font-size:11px;color:var(--accent);letter-spacing:2px;text-transform:uppercase;margin-bottom:16px;">📤 Ingestion Pipeline (runs after CSV upload)</div>
+      <div class="llm-flow">
+        <div class="pipeline-step ps-1">
+          <div class="step-num sn-1">1</div>
+          <div>
+            <div class="step-content-title">Parse CSV</div>
+            <div class="step-content-desc">Read bank statement. Clean columns. Normalize dates and amounts. Handle missing values.</div>
+          </div>
+          <div class="step-tech">
+            <div class="tech-pill tp-blue">pandas</div>
+            <div class="tech-pill tp-blue">PyMuPDF</div>
+          </div>
+        </div>
+        <div class="connector">↓ list of transaction dicts</div>
+        <div class="pipeline-step ps-2">
+          <div class="step-num sn-2">2</div>
+          <div>
+            <div class="step-content-title">Categorize Transactions</div>
+            <div class="step-content-desc">Match description keywords → category labels. Store in DB with category_id.</div>
+          </div>
+          <div class="step-tech">
+            <div class="tech-pill tp-yellow">keyword rules</div>
+            <div class="tech-pill tp-yellow">scikit-learn</div>
+          </div>
+        </div>
+        <div class="connector">↓ categorized transactions → saved to SQLite</div>
+        <div class="pipeline-step ps-3">
+          <div class="step-num sn-3">3</div>
+          <div>
+            <div class="step-content-title">Generate Embeddings</div>
+            <div class="step-content-desc">Convert each transaction to a semantic vector. Text = "date + description + amount + category".</div>
+          </div>
+          <div class="step-tech">
+            <div class="tech-pill tp-purple">sentence-transformers</div>
+            <div class="tech-pill tp-purple">all-MiniLM-L6-v2</div>
+          </div>
+        </div>
+        <div class="connector">↓ 384-dim vectors</div>
+        <div class="pipeline-step ps-4">
+          <div class="step-num sn-4">4</div>
+          <div>
+            <div class="step-content-title">Store in ChromaDB</div>
+            <div class="step-content-desc">Upsert vectors with metadata (user_id, date, category, amount). Scoped per user.</div>
+          </div>
+          <div class="step-tech">
+            <div class="tech-pill tp-green">ChromaDB</div>
+            <div class="tech-pill tp-green">local disk</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div style="font-size:11px;color:var(--accent2);letter-spacing:2px;text-transform:uppercase;margin-bottom:16px;">💬 Query Pipeline (runs on /chat/ask)</div>
+      <div class="llm-flow">
+        <div class="pipeline-step ps-1">
+          <div class="step-num sn-1">1</div>
+          <div>
+            <div class="step-content-title">Receive Question</div>
+            <div class="step-content-desc">User sends: "Where am I overspending this month?" — validate JWT, extract user_id.</div>
+          </div>
+          <div class="step-tech">
+            <div class="tech-pill tp-blue">FastAPI</div>
+            <div class="tech-pill tp-blue">Pydantic</div>
+          </div>
+        </div>
+        <div class="connector">↓ validated ChatRequest</div>
+        <div class="pipeline-step ps-2">
+          <div class="step-num sn-2">2</div>
+          <div>
+            <div class="step-content-title">Embed the Question</div>
+            <div class="step-content-desc">Convert question to same vector space as transaction embeddings using same model.</div>
+          </div>
+          <div class="step-tech">
+            <div class="tech-pill tp-purple">sentence-transformers</div>
+          </div>
+        </div>
+        <div class="connector">↓ query vector</div>
+        <div class="pipeline-step ps-3">
+          <div class="step-num sn-3">3</div>
+          <div>
+            <div class="step-content-title">Semantic Search</div>
+            <div class="step-content-desc">ChromaDB cosine similarity search. Retrieve top-5 most relevant transactions. Filter by user_id.</div>
+          </div>
+          <div class="step-tech">
+            <div class="tech-pill tp-green">ChromaDB</div>
+            <div class="tech-pill tp-green">top_k=5</div>
+          </div>
+        </div>
+        <div class="connector">↓ relevant transaction context</div>
+        <div class="pipeline-step ps-4">
+          <div class="step-num sn-4">4</div>
+          <div>
+            <div class="step-content-title">Build Prompt</div>
+            <div class="step-content-desc">Inject retrieved transactions into prompt template with user's question. Add financial advisor system prompt.</div>
+          </div>
+          <div class="step-tech">
+            <div class="tech-pill tp-yellow">prompt engineering</div>
+          </div>
+        </div>
+        <div class="connector">↓ rich contextual prompt</div>
+        <div class="pipeline-step ps-5">
+          <div class="step-num sn-5">5</div>
+          <div>
+            <div class="step-content-title">Ollama → Mistral 7B</div>
+            <div class="step-content-desc">POST to localhost:11434/api/generate. Stream response tokens back to user. Fully local, zero cost.</div>
+          </div>
+          <div class="step-tech">
+            <div class="tech-pill tp-green">Ollama</div>
+            <div class="tech-pill tp-green">Mistral 7B</div>
+            <div class="tech-pill tp-orange">streaming</div>
+          </div>
+        </div>
+        <div class="connector">↓ streamed AI response</div>
+        <div class="pipeline-step ps-6">
+          <div class="step-num sn-6">6</div>
+          <div>
+            <div class="step-content-title">Save + Return</div>
+            <div class="step-content-desc">Persist Q&A + sources to chat_history table. Return answer with transaction references to frontend.</div>
+          </div>
+          <div class="step-tech">
+            <div class="tech-pill tp-blue">SQLite</div>
+            <div class="tech-pill tp-blue">JSON response</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div style="margin-top:24px; padding:14px 20px; background:var(--surface); border:1px solid rgba(0,255,136,0.2); border-radius:4px; font-size:10px; max-width:1100px; display:flex; gap:20px; align-items:center;">
+    <div style="font-size:24px;">🤖</div>
+    <div>
+      <div style="color:var(--accent2); font-family:'Syne',sans-serif; font-weight:700; margin-bottom:4px;">Ollama Connection</div>
+      <div style="color:var(--muted); line-height:1.7;">
+        Install: <code style="color:var(--accent)">curl -fsSL https://ollama.ai/install.sh | sh</code> &nbsp;→&nbsp;
+        Pull model: <code style="color:var(--accent)">ollama pull mistral</code> &nbsp;→&nbsp;
+        Run: <code style="color:var(--accent)">ollama serve</code> &nbsp;→&nbsp;
+        API available at <code style="color:var(--warning)">http://localhost:11434</code>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function showView(id) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('view-' + id).classList.add('active');
+    event.target.classList.add('active');
+  }
+</script>
+
+</body>
+</html>

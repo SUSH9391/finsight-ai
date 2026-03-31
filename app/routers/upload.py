@@ -1,12 +1,21 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from typing import List, Dict
 from app.services.parser import parse_csv
+from app.services.categorizer import categorize_transactions
+from app.database.db import get_db, create_transaction, delete_all_transactions
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+from app.database.models import TransactionModel
 
 router = APIRouter()
 
 
 @router.post("/csv")
-async def upload_csv(file: UploadFile = File(...)):
+async def upload_csv(
+    file: UploadFile = File(..., media_type="text/csv"), 
+    db: Session = Depends(get_db),
+    # TODO Phase 3: current_user: UserModel = Depends(get_current_user)
+):
     """
     Upload a bank statement CSV.
     Parses → categorizes → stores in memory.
@@ -25,11 +34,13 @@ async def upload_csv(file: UploadFile = File(...)):
         if not transactions:
             raise HTTPException(status_code=400, detail="No transactions found in file")
 
-        # ✅ Avoid circular import (IMPORTANT)
-        from app.routers.analysis import set_transactions
+        # ✅ Categorize
+        categorized = categorize_transactions(transactions)
 
-        # ✅ Store transactions (for analysis module)
-        set_transactions(transactions)
+        # ✅ Clear old data and save to DB
+        delete_all_transactions(db)
+        for txn in categorized:
+            create_transaction(db, txn)
 
         # ✅ Clean preview (only useful fields)
         preview = [
@@ -39,7 +50,7 @@ async def upload_csv(file: UploadFile = File(...)):
                 "amount": txn.get("amount"),
                 "category": txn.get("category"),
             }
-            for txn in transactions[:5]
+            for txn in categorized[:5]
         ]
 
         return {
@@ -51,17 +62,31 @@ async def upload_csv(file: UploadFile = File(...)):
 
     except HTTPException:
         raise
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
 @router.get("/history")
-def get_upload_history():
+async def get_upload_history(db = Depends(get_db)):
     """
-    Placeholder endpoint.
-    Later: connect to DB and return uploaded files history.
+    Get upload history from transaction created_at groups.
     """
-    return {
-        "message": "Upload history will be available once DB is connected"
-    }
+    if not db.query(TransactionModel).first():
+        return {"message": "No uploads yet. Upload a CSV first.", "uploads": []}
+    
+    # Group by date(created_at)
+    history = db.query(
+        func.date(TransactionModel.created_at).label('upload_date'),
+        func.count().label('transaction_count')
+    ).group_by(func.date(TransactionModel.created_at)).order_by(func.date(TransactionModel.created_at).desc()).all()
+    
+    uploads = [
+        {
+            "upload_date": str(h.upload_date),
+            "transaction_count": h.transaction_count,
+            "filename": f"statement_{h.upload_date.strftime('%Y%m%d')}.csv"  # proxy
+        }
+        for h in history
+    ]
+    
+    return {"uploads": uploads, "total_transactions": db.query(func.count(TransactionModel.id)).scalar()}

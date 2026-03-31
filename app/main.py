@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import upload, analysis, chat
+from fastapi.security import HTTPBearer
+from app.routers import upload, analysis, chat, auth
 
 app = FastAPI(
     title="FinSight AI",
@@ -16,10 +17,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Auth middleware - protects all endpoints except /auth/*
+security = HTTPBearer()
+
 # Register routers
-app.include_router(upload.router, prefix="/api/upload", tags=["Upload"])
-app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis"])
-app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])
+app.include_router(upload.router, prefix="/api/v1/upload", tags=["Upload"])
+app.include_router(analysis.router, prefix="/api/v1/analysis", tags=["Analysis"])
+app.include_router(chat.router, prefix="/api/v1/chat", tags=["Chat"])
 
 @app.get("/health", tags=["Health"])
 def health_check():

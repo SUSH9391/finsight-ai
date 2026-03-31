@@ -3,7 +3,8 @@ from sqlalchemy import engine_from_config, pool, create_engine
 from alembic import context
 import os
 from dotenv import load_dotenv
-from app.database.db import Base, TransactionModel
+from app.database.models import Base
+from app.database.db import engine as target_engine
 load_dotenv()
 
 config = context.config

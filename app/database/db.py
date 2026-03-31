@@ -1,41 +1,23 @@
-from sqlalchemy import create_engine, Column, Integer, String, Numeric, DateTime, Enum
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.types import Date
-from datetime import datetime
 import os
 from dotenv import load_dotenv
-import enum
+from .models import Base, TransactionType  # New models file
+
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise ValueError("DATABASE_URL environment variable is not set. Please check your .env file.")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./finsight.db")  # Fallback to SQLite
+if not DATABASE_URL or DATABASE_URL == "sqlite:///./finsight.db":
+    print("⚠️ Using SQLite (development). Set DATABASE_URL in .env for PostgreSQL.")
 
 engine = create_engine(
     DATABASE_URL,
-    pool_pre_ping=True,   # avoids stale connections
-    pool_size=5,          # connection pool
+    pool_pre_ping=True,
+    pool_size=5,
     max_overflow=10,
-    connect_args={"sslmode":"require"}
+    connect_args={"sslmode": "require"} if "postgresql" in DATABASE_URL else {}
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-class TransactionType(enum.Enum):
-    CREDIT = "credit"
-    DEBIT = "debit"
-
-class TransactionModel(Base):
-    __tablename__ = "transactions"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    date = Column(Date, nullable=False)
-    description = Column(String, nullable=False)
-    amount = Column(Numeric(12, 2), nullable=False)
-    category = Column(String, default="Others")
-    type = Column(Enum(TransactionType), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
 
 def get_db():
     """Dependency to get DB session"""
@@ -47,3 +29,52 @@ def get_db():
 
 def create_tables():
     Base.metadata.create_all(bind=engine)
+
+def get_all_transactions(db, user_id: int = None, skip: int = 0, limit: int = 100, **filters):
+    """Filter by user_id + pagination"""
+    from .models import TransactionModel
+    query = db.query(TransactionModel)
+    if user_id:
+        query = query.filter(TransactionModel.user_id == user_id)
+    for key, value in filters.items():
+        if hasattr(TransactionModel, key):
+            query = query.filter(getattr(TransactionModel, key) == value)
+    return query.offset(skip).limit(limit).all()
+
+def delete_all_transactions(db, user_id: int = None):
+    """Delete user's transactions"""
+    from .models import TransactionModel
+    query = db.query(TransactionModel)
+    if user_id:
+        query = query.filter(TransactionModel.user_id == user_id)
+    query.delete()
+    db.commit()
+
+def create_transaction(db, txn: dict, user_id: int, upload_id: int):
+    """Create transaction with FKs"""
+    from .models import TransactionModel, CategoryModel
+    from decimal import Decimal
+    
+    # Find or create category
+    category = db.query(CategoryModel).filter(CategoryModel.name == txn.get('category', 'Others')).first()
+    if not category:
+        category = CategoryModel(name=txn.get('category', 'Others'))
+        db.add(category)
+        db.commit()
+        db.refresh(category)
+    
+    db_txn = TransactionModel(
+        user_id=user_id,
+        upload_id=upload_id,
+        category_id=category.id,
+        date=txn.get('date', date.today()),
+        description=txn['description'],
+        amount=Decimal(str(txn['amount'])),
+        type='credit' if txn['amount'] > 0 else 'debit'
+    )
+    db.add(db_txn)
+    db.commit()
+    db.refresh(db_txn)
+    return db_txn
+
+

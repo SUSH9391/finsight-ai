@@ -1,20 +1,33 @@
-# Embeddings service using sentence-transformers (free, local)
-# Will be fully implemented in Day 3
+from sentence_transformers import SentenceTransformer
+from typing import List
+import numpy as np
+from app.database.db import get_db
+from app.database.models import TransactionModel
+from sqlalchemy.orm import Session
 
-class EmbeddingService:
-    def __init__(self):
-        self.model = None  # Will load sentence-transformers model
-    
-    def load_model(self):
-        """Load the embedding model — implemented in Day 3"""
-        pass
-    
-    def embed_text(self, text: str):
-        """Generate embeddings for text — implemented in Day 3"""
-        pass
-    
-    def embed_batch(self, texts: list):
-        """Generate embeddings for multiple texts — implemented in Day 3"""
-        pass
+# Load embedding model (all-MiniLM-L6-v2 = 384 dim, fast)
+model = SentenceTransformer('all-MiniLM-L6-v2')
 
-embedding_service = EmbeddingService()
+def embed_transactions(db: Session, user_id: int) -> List[np.ndarray]:
+    """
+    Embed user's transactions for RAG. 
+    Text format: "date + description + amount + category"
+    """
+    txns = db.query(TransactionModel).filter(TransactionModel.user_id == user_id).all()
+    
+    texts = []
+    for txn in txns:
+        text = f"{txn.date} | {txn.description} | ₹{float(txn.amount):.2f} | {txn.category or 'Others'}"
+        texts.append(text)
+    
+    if not texts:
+        return []
+    
+    embeddings = model.encode(texts)
+    return embeddings.tolist()
+
+def embed_single(text: str) -> List[float]:
+    """Embed single text (question)"""
+    embedding = model.encode([text])
+    return embedding[0].tolist()
+

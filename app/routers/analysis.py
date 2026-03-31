@@ -1,56 +1,60 @@
-from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
+from fastapi import APIRouter, HTTPException, Query, Depends
+from typing import Optional, List, Dict
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+from sqlalchemy.orm import Session
 from app.services.categorizer import (
-    categorize_transactions,
     get_spending_summary,
     get_monthly_trend,
 )
+from app.database.db import get_db, get_all_transactions
+from app.database.models import TransactionModel, TransactionType
 
 router = APIRouter()
 
-# In-memory store for now — will move to DB in next step
-_transactions_store: list = []
+def model_to_dict(t):
+    """Convert TransactionModel to dict for service compatibility"""
+    return {
+        "date": str(t.date),
+        "description": t.description,
+        "amount": float(t.amount),
+        "category": t.category or "Others",
+        "type": str(t.type),
+    }
 
-def get_stored_transactions():
-    """Get current in-memory transactions"""
-    if not _transactions_store:
-        raise HTTPException(
-            status_code=404,
-            detail="No transactions found. Please upload a CSV first."
-        )
-    return _transactions_store
-
-def set_transactions(transactions: list):
-    """Called by upload router after parsing CSV"""
-    global _transactions_store
-    _transactions_store = categorize_transactions(transactions)
-
-@router.get("/summary")
-def get_summary():
+@router.get("/summary") 
+async def get_summary(db: Session = Depends(get_db)):
+    # TODO Phase 3: current_user: UserModel = Depends(get_current_user)
     """
     Returns total income, expenses, net savings,
     top spending category, and full category breakdown.
     Call this on dashboard load after CSV upload.
     """
-    transactions = get_stored_transactions()
+    db_txns = get_all_transactions(db)
+    transactions = [model_to_dict(t) for t in db_txns]
+    if not transactions:
+        raise HTTPException(status_code=404, detail="No transactions found. Please upload a CSV first.")
     total_income = sum(t["amount"] for t in transactions if t["amount"] > 0)
     total_expenses = abs(sum(t["amount"] for t in transactions if t["amount"] < 0))
     net_savings = total_income - total_expenses
     summary = get_spending_summary(transactions)
     return {
-        "total_income": total_income,
-        "total_expenses": total_expenses,
-        "net_savings": net_savings,
+        "total_income": round(total_income, 2),
+        "total_expenses": round(total_expenses, 2),
+        "net_savings": round(net_savings, 2),
         **summary
     }
 
 @router.get("/categories")
-def get_categories():
+async def get_categories(db: Session = Depends(get_db)):
     """
     Returns spending grouped by category with totals.
     Use this to render the pie chart.
     """
-    transactions = get_stored_transactions()
+    db_txns = get_all_transactions(db)
+    transactions = [model_to_dict(t) for t in db_txns]
+    if not transactions:
+        raise HTTPException(status_code=404, detail="No transactions found. Please upload a CSV first.")
     summary = get_spending_summary(transactions)
     return {
         "categories": summary.get("category_breakdown", {}),
@@ -58,44 +62,48 @@ def get_categories():
     }
 
 @router.get("/monthly")
-def get_monthly():
+async def get_monthly(db: Session = Depends(get_db)):
     """
     Returns month-over-month income vs expense trend.
     Use this to render the line/bar chart.
     """
-    transactions = get_stored_transactions()
+    db_txns = get_all_transactions(db)
+    transactions = [model_to_dict(t) for t in db_txns]
+    if not transactions:
+        raise HTTPException(status_code=404, detail="No transactions found. Please upload a CSV first.")
     trend = get_monthly_trend(transactions)
     return {"monthly_trend": trend}
 
 @router.get("/transactions")
-def get_transactions(
+async def get_transactions(
     category: Optional[str] = Query(None, description="Filter by category"),
-    type: Optional[str] = Query(None, description="Filter by credit or debit"),
+    txn_type: Optional[str] = Query(None, description="Filter by credit or debit"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
 ):
     """
     Returns paginated transaction list.
     Supports filtering by category and type.
     """
-    transactions = get_stored_transactions()
+    skip = (page - 1) * page_size
+    db_txns = get_all_transactions(db, skip=skip, limit=page_size, category=category, txn_type=txn_type)
+    transactions = [model_to_dict(t) for t in db_txns]
 
-    # Apply filters
-    filtered = transactions
+    if not transactions:
+        raise HTTPException(status_code=404, detail="No transactions found. Please upload a CSV first.")
+
+    # Get total count with same filters
+    total_query = db.query(func.count(TransactionModel.id))
     if category:
-        filtered = [t for t in filtered if t.get("category", "").lower() == category.lower()]
-    if type:
-        filtered = [t for t in filtered if t.get("type", "").lower() == type.lower()]
-
-    # Paginate
-    total = len(filtered)
-    start = (page - 1) * page_size
-    end = start + page_size
-    paginated = filtered[start:end]
+        total_query = total_query.filter(TransactionModel.category == category)
+    if txn_type:
+        total_query = total_query.filter(TransactionModel.type == TransactionType(txn_type.lower()))
+    total = total_query.scalar()
 
     return {
         "total": total,
         "page": page,
         "page_size": page_size,
-        "transactions": paginated,
+        "transactions": transactions,
     }
