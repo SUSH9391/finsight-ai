@@ -23,8 +23,7 @@ target_metadata = Base.metadata
 def run_migrations_online():
     connectable = create_engine(
         DATABASE_URL,
-        poolclass=pool.NullPool,
-        connect_args={"sslmode": "require"}  # Supabase fix
+        poolclass=pool.NullPool
     )
 
     with connectable.connect() as connection:

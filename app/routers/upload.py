@@ -5,7 +5,8 @@ from app.services.categorizer import categorize_transactions
 from app.database.db import get_db, create_transaction, delete_all_transactions
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from app.database.models import TransactionModel
+from app.database.models import TransactionModel, UserModel
+from app.routers.auth import get_current_user
 
 router = APIRouter()
 
@@ -14,7 +15,7 @@ router = APIRouter()
 async def upload_csv(
     file: UploadFile = File(..., media_type="text/csv"), 
     db: Session = Depends(get_db),
-    # TODO Phase 3: current_user: UserModel = Depends(get_current_user)
+    current_user: UserModel = Depends(get_current_user)
 ):
     """
     Upload a bank statement CSV.
@@ -38,9 +39,9 @@ async def upload_csv(
         categorized = categorize_transactions(transactions)
 
         # ✅ Clear old data and save to DB
-        delete_all_transactions(db)
+        delete_all_transactions(db, current_user.id)
         for txn in categorized:
-            create_transaction(db, txn)
+            create_transaction(db, txn, current_user.id, upload_id=1)  # TODO: create proper upload record
 
         # ✅ Clean preview (only useful fields)
         preview = [
@@ -67,18 +68,18 @@ async def upload_csv(
 
 
 @router.get("/history")
-async def get_upload_history(db = Depends(get_db)):
+async def get_upload_history(db: Session = Depends(get_db), current_user: UserModel = Depends(get_current_user)):
     """
     Get upload history from transaction created_at groups.
     """
-    if not db.query(TransactionModel).first():
+    if not db.query(TransactionModel).filter(TransactionModel.user_id == current_user.id).first():
         return {"message": "No uploads yet. Upload a CSV first.", "uploads": []}
     
     # Group by date(created_at)
     history = db.query(
         func.date(TransactionModel.created_at).label('upload_date'),
         func.count().label('transaction_count')
-    ).group_by(func.date(TransactionModel.created_at)).order_by(func.date(TransactionModel.created_at).desc()).all()
+    ).filter(TransactionModel.user_id == current_user.id).group_by(func.date(TransactionModel.created_at)).order_by(func.date(TransactionModel.created_at).desc()).all()
     
     uploads = [
         {
@@ -89,4 +90,4 @@ async def get_upload_history(db = Depends(get_db)):
         for h in history
     ]
     
-    return {"uploads": uploads, "total_transactions": db.query(func.count(TransactionModel.id)).scalar()}
+    return {"uploads": uploads, "total_transactions": db.query(func.count(TransactionModel.id)).filter(TransactionModel.user_id == current_user.id).scalar()}

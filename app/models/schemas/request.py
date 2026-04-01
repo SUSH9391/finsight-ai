@@ -1,7 +1,5 @@
-from pydantic import BaseModel
-from typing import Annotated
-from pydantic import Field
-from typing import Optional
+from pydantic import BaseModel, Field, EmailStr
+from typing import Optional, Annotated
 
 # Existing
 class TransactionCreate(BaseModel):
@@ -15,24 +13,12 @@ class ChatRequest(BaseModel):
     question: str
     session_id: Optional[str] = None
 
-# New for Auth Phase 2
+# New for Auth
 class UserCreate(BaseModel):
-    email: Annotated[str, Field(pattern=r'^[^@]+@[^@]+\.[^@]+$', strict=True)]
+    email: EmailStr
     full_name: str
     password: str
 
 class UserLogin(BaseModel):
     username: str
     password: str
-
-class UserResponse(BaseModel):
-    id: int
-    email: str
-    full_name: str
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-
-UserCreate.model_config = {"from_attributes": True}
-UserResponse.model_config = {"from_attributes": True}

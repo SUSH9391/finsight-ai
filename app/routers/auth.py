@@ -3,27 +3,29 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import Optional
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from app.database.db import get_db
 from app.database.models import UserModel
-from app.models.schemas.request import UserCreate, UserLogin  # Will create these
+from app.models.schemas.request import UserCreate
+from app.models.schemas.response import UserResponse, Token
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+router = APIRouter(tags=["Authentication"])
+
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Auth config
-SECRET_KEY = "your-super-secret-key-change-in-prod"
+SECRET_KEY = os.getenv("SECRET_KEY", "dev-fallback-super-secret-key-do-not-use-in-prod")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
-
-# Pydantic models
-class Token(BaseModel):
-    access_token: str
-    token_type: str
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 class TokenData(BaseModel):
     username: Optional[str] = None
@@ -45,7 +47,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-async def get_current_user(db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)):
+async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -57,14 +59,14 @@ async def get_current_user(db: Session = Depends(get_db), token: str = Depends(o
         if username is None:
             raise credentials_exception
         token_data = TokenData(username=username)
-    except JWTError:
+    except PyJWTError:
         raise credentials_exception
     user = db.query(UserModel).filter(UserModel.email == token_data.username).first()
     if user is None:
         raise credentials_exception
     return user
 
-@router.post("/register", response_model=dict)
+@router.post("/register", response_model=UserResponse)
 async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     # Check if user exists
     db_user = db.query(UserModel).filter(UserModel.email == user_data.email).first()
@@ -80,7 +82,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
-    return {"message": "User created", "user_id": db_user.id, "email": db_user.email}
+    return db_user
 
 @router.post("/login", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
@@ -97,7 +99,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
-@router.get("/me")
+@router.get("/me", response_model=UserResponse)
 async def read_users_me(current_user: UserModel = Depends(get_current_user)):
-    return {"user_id": current_user.id, "email": current_user.email, "full_name": current_user.full_name}
+    return current_user
 

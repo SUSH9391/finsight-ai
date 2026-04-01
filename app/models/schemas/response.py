@@ -1,6 +1,16 @@
 from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    email: str
+    full_name: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
 class TransactionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     
@@ -27,4 +37,3 @@ class SpendingSummary(BaseModel):
     net_savings: float
     top_category: str
     categories: dict
- 
