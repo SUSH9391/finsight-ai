@@ -31,7 +31,7 @@ plotly>=5.20,<6.0
 # ML / Embeddings (required for chat)
 
 sentence-transformers>=3.0,<4.0
-chromadb>=0.5,<1.0
+
 
 # Optional (recommended for real-world apps)
 

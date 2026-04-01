@@ -6,8 +6,6 @@ from app.database.models import UserModel
 from app.routers.auth import get_current_user
 from app.models.schemas.request import ChatRequest
 from app.services.llm import ask_llm
-from app.services.embeddings import embed_single
-from app.services.vectorstore import search_user_transactions
 
 router = APIRouter()
 
@@ -17,12 +15,8 @@ async def ask_question(
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_user)
 ):
-    """RAG Chat: Embed question → ChromaDB search → Mistral response (stream)"""
+    """Chat: Mistral response with transaction context from DB (stream)"""
     question = request.question
-    
-    # RAG Pipeline
-    query_emb = embed_single(question)
-    context = search_user_transactions(current_user.id, query_emb)
     
     # Stream LLM response  
     return StreamingResponse(
@@ -30,11 +24,4 @@ async def ask_question(
         media_type="text/plain"
     )
 
-@router.post("/embed")
-async def trigger_embedding(
-    current_user: UserModel = Depends(get_current_user)
-):
-    """Call after upload - embed user's transactions"""
-    from app.services.vectorstore import store_user_transactions
-    store_user_transactions(current_user.id)
-    return {"message": "✅ Transactions embedded! Ready for chat."}
+

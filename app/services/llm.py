@@ -1,8 +1,6 @@
 import requests
 from typing import Generator
-from app.services.embeddings import embed_single
-from app.services.vectorstore import search_user_transactions
-from app.database.db import SessionLocal
+from app.database.db import SessionLocal, get_all_transactions
 
 OLLAMA_BASE = "http://localhost:11434"
 MODEL_NAME = "mistral"
@@ -32,18 +30,24 @@ Answer:"""
 
 async def ask_llm(question: str, user_id: int) -> Generator[str, None, None]:
     """
-    RAG pipeline → Ollama streaming response.
-    1. Embed question → 2. ChromaDB search → 3. Mistral generate
+    SQL DB context → Ollama streaming response.
+    Context from recent transactions.
     """
-    # 1. Embed question
-    query_emb = embed_single(question)
-    
-    # 2. RAG retrieve (per user)
+    # 1. Get recent transactions for context
     db = SessionLocal()
-    context = search_user_transactions(user_id, query_emb)
+    txns = get_all_transactions(db, user_id, limit=5)
+    context = [
+        {
+            "date": str(t.date),
+            "description": t.description,
+            "amount": float(t.amount),
+            "category": getattr(t, 'category', 'Others') or 'Others'
+        }
+        for t in txns
+    ]
     db.close()
     
-    # 3. Build prompt
+    # 2. Build prompt
     prompt = generate_prompt(question, user_id, context)
     
     # 4. Ollama stream
