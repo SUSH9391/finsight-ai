@@ -15,10 +15,10 @@ async def ask_question(
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_user)
 ):
-    """Chat: Mistral response with transaction context from DB (stream)"""
+    """Chat: Stream response from HuggingFace Mistral-7B with user's transaction context."""
     question = request.question
-    
-    # Stream LLM response  
+
+    # Stream LLM response via HuggingFace Inference API
     return StreamingResponse(
         ask_llm(question, current_user.id),
         media_type="text/plain"

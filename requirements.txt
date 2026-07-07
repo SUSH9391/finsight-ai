@@ -28,9 +28,10 @@ pytest>=8.0,<9.0
 streamlit>=1.35,<2.0
 plotly>=5.20,<6.0
 
-# ML / Embeddings (required for chat)
+# ML / Embeddings + HuggingFace Inference API
 
 sentence-transformers>=3.0,<4.0
+huggingface_hub>=0.24,<1.0
 
 
 # Optional (recommended for real-world apps)

@@ -1,77 +1,86 @@
-import requests
-from typing import Generator
+import os
+from typing import AsyncGenerator
+from dotenv import load_dotenv
+from huggingface_hub import InferenceClient
 from app.database.db import SessionLocal, get_all_transactions
 
-OLLAMA_BASE = "http://localhost:11434"
-MODEL_NAME = "mistral"
+load_dotenv()
 
-def generate_prompt(question: str, user_id: int, context_transactions: list) -> str:
+HF_TOKEN = os.getenv("HF_TOKEN")
+# Qwen2.5-7B-Instruct — confirmed working on HF free Inference API
+MODEL_NAME = os.getenv("HF_MODEL", "Qwen/Qwen2.5-7B-Instruct")
+
+# Initialise once at module level
+client = InferenceClient(token=HF_TOKEN)
+
+
+def build_messages(question: str, context_transactions: list) -> list:
     """
-    Build RAG prompt for financial advisor.
-    Context: Top 5 relevant transactions.
+    Build OpenAI-style chat messages for the HuggingFace chat_completion API.
+    Includes top-N transaction context for RAG-style grounding.
     """
-    context_text = "\n".join([
-        f"- {t['category']}: ₹{t['amount']} on {t['date']} ({t['description'][:50]}...)"
-        for t in context_transactions
-    ])
-    
-    prompt = f"""You are a financial advisor analyzing the user's bank transactions. 
+    if context_transactions:
+        context_lines = "\n".join([
+            f"- {t['category']}: ₹{t['amount']} on {t['date']} "
+            f"({str(t['description'])[:60]})"
+            for t in context_transactions
+        ])
+        system_content = (
+            "You are FinSight AI, an expert personal finance advisor. "
+            "Analyse the user's real bank transactions below and answer their question "
+            "with specific numbers and actionable advice. Be concise.\n\n"
+            f"USER TRANSACTIONS (most relevant):\n{context_lines}"
+        )
+    else:
+        system_content = (
+            "You are FinSight AI, an expert personal finance advisor. "
+            "The user has not uploaded any transactions yet. "
+            "Give general financial advice and encourage them to upload their bank statement."
+        )
 
-USER TRANSACTIONS (most relevant):
-{context_text}
-
-USER QUESTION: {question}
-
-Provide a helpful, actionable financial insight. Use exact numbers from transactions. Be concise but specific. Format naturally.
-
-Answer:"""
-    
-    return prompt
-
-async def ask_llm(question: str, user_id: int) -> Generator[str, None, None]:
-    """
-    SQL DB context → Ollama streaming response.
-    Context from recent transactions.
-    """
-    # 1. Get recent transactions for context
-    db = SessionLocal()
-    txns = get_all_transactions(db, user_id, limit=5)
-    context = [
-        {
-            "date": str(t.date),
-            "description": t.description,
-            "amount": float(t.amount),
-            "category": getattr(t, 'category', 'Others') or 'Others'
-        }
-        for t in txns
+    return [
+        {"role": "system", "content": system_content},
+        {"role": "user",   "content": question},
     ]
-    db.close()
-    
-    # 2. Build prompt
-    prompt = generate_prompt(question, user_id, context)
-    
-    # 4. Ollama stream
-    response = requests.post(
-        f"{OLLAMA_BASE}/api/generate",
-        json={
-            "model": MODEL_NAME,
-            "prompt": prompt,
-            "stream": True,
-            "options": {"temperature": 0.1, "top_p": 0.9}
-        },
-        stream=True
-    )
-    
-    if response.status_code != 200:
-        yield "Error calling LLM"
-        return
-    
-    for line in response.iter_lines():
-        if line:
-            chunk = line.decode('utf-8')
-            if 'response' in chunk:
-                # Extract response field from JSON line
-                resp = chunk.split('"response":"')[1].split('"')[0]
-                if resp:
-                    yield resp
 
+
+async def ask_llm(question: str, user_id: int) -> AsyncGenerator[str, None]:
+    """
+    Fetch transaction context from DB → stream a response from
+    HuggingFace Inference API (Mistral-7B-Instruct).
+    """
+    # 1. Pull recent transactions for context
+    db = SessionLocal()
+    try:
+        txns = get_all_transactions(db, user_id, limit=10)
+        context = [
+            {
+                "date":        str(t.date),
+                "description": t.description,
+                "amount":      float(t.amount),
+                "category":    (getattr(t, "category", None) or "Others"),
+            }
+            for t in txns
+        ]
+    finally:
+        db.close()
+
+    # 2. Build prompt messages
+    messages = build_messages(question, context)
+
+    # 3. Stream from HuggingFace Inference API
+    try:
+        stream = client.chat_completion(
+            messages=messages,
+            model=MODEL_NAME,
+            max_tokens=600,
+            temperature=0.2,
+            top_p=0.9,
+            stream=True,
+        )
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta
+    except Exception as e:
+        yield f"\n⚠️ Error calling HuggingFace API: {str(e)}"

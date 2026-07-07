@@ -19,16 +19,19 @@ print(f"Using DATABASE_URL: {DATABASE_URL}")
 
 if DATABASE_URL and "postgresql" in DATABASE_URL.lower():
     connect_args = {"sslmode": "require"}
+    engine = create_engine(
+        DATABASE_URL,
+        pool_pre_ping=True,
+        pool_size=5,
+        max_overflow=10,
+        connect_args=connect_args
+    )
 else:
-    connect_args = {}
-
-engine = create_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,
-    pool_size=5,
-    max_overflow=10,
-    connect_args=connect_args
-)
+    # SQLite: no pool_size/max_overflow; needs check_same_thread=False for FastAPI
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={"check_same_thread": False}
+    )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

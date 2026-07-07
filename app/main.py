@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import upload, analysis, chat, auth
+from app.database.db import create_tables
 
 app = FastAPI(
     title="FinSight AI",
@@ -17,7 +18,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
+@app.on_event("startup")
+def startup_event():
+    create_tables()
 
 # Register routers
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])

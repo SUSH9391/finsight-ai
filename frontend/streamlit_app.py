@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 
 # ─── Config ───────────────────────────────────────────
-API_BASE = "http://localhost:8000/api"
+API_BASE = "http://localhost:8000/api/v1"
 
 st.set_page_config(
     page_title="FinSight AI",
@@ -13,8 +13,82 @@ st.set_page_config(
 )
 
 # ─── Session state init ────────────────────────────────
-# No session caching - always fresh data
-pass
+if "jwt_token" not in st.session_state:
+    st.session_state.jwt_token = None
+if "user_email" not in st.session_state:
+    st.session_state.user_email = None
+
+# ─── Auth helpers ──────────────────────────────────────
+def auth_headers():
+    if st.session_state.jwt_token:
+        return {"Authorization": f"Bearer {st.session_state.jwt_token}"}
+    return {}
+
+# ─── Sidebar: Login / Register ─────────────────────────
+with st.sidebar:
+    st.title("🔐 FinSight AI")
+
+    if st.session_state.jwt_token:
+        st.success(f"Logged in as\n**{st.session_state.user_email}**")
+        if st.button("Logout", use_container_width=True):
+            st.session_state.jwt_token = None
+            st.session_state.user_email = None
+            st.rerun()
+    else:
+        tab_login, tab_register = st.tabs(["Login", "Register"])
+
+        with tab_login:
+            login_email = st.text_input("Email", key="login_email")
+            login_password = st.text_input("Password", type="password", key="login_password")
+            if st.button("Login", use_container_width=True, key="btn_login"):
+                try:
+                    res = requests.post(
+                        f"{API_BASE}/auth/login",
+                        data={"username": login_email, "password": login_password},
+                        headers={"Content-Type": "application/x-www-form-urlencoded"}
+                    )
+                    if res.status_code == 200:
+                        token_data = res.json()
+                        st.session_state.jwt_token = token_data["access_token"]
+                        st.session_state.user_email = login_email
+                        st.success("✅ Logged in!")
+                        st.rerun()
+                    else:
+                        try:
+                            detail = res.json().get("detail", "Login failed")
+                        except Exception:
+                            detail = res.text or f"HTTP {res.status_code}"
+                        st.error(f"❌ {detail}")
+                except requests.exceptions.ConnectionError:
+                    st.error("❌ Cannot connect to backend.")
+
+        with tab_register:
+            reg_name = st.text_input("Full Name", key="reg_name")
+            reg_email = st.text_input("Email", key="reg_email")
+            reg_password = st.text_input("Password", type="password", key="reg_password")
+            if st.button("Register", use_container_width=True, key="btn_register"):
+                try:
+                    res = requests.post(
+                        f"{API_BASE}/auth/register",
+                        json={"full_name": reg_name, "email": reg_email, "password": reg_password}
+                    )
+                    if res.status_code == 200:
+                        st.success("✅ Account created! Please log in.")
+                    else:
+                        try:
+                            detail = res.json().get("detail", "Registration failed")
+                        except Exception:
+                            detail = res.text or f"HTTP {res.status_code}"
+                        st.error(f"❌ {detail}")
+                except requests.exceptions.ConnectionError:
+                    st.error("❌ Cannot connect to backend.")
+
+# ─── Main content: require login ──────────────────────
+if not st.session_state.jwt_token:
+    st.title("💰 FinSight AI")
+    st.subheader("Your AI-powered personal finance advisor")
+    st.info("👈 Please **login or register** in the sidebar to get started.")
+    st.stop()
 
 # ─── Header ───────────────────────────────────────────
 st.title("💰 FinSight AI")
@@ -28,18 +102,22 @@ uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
 if uploaded_file:
     with st.spinner("Uploading and categorizing transactions..."):
         try:
-            # Send CSV to FastAPI
             response = requests.post(
                 f"{API_BASE}/upload/csv",
-                files={"file": (uploaded_file.name, uploaded_file.getvalue(), "text/csv")}
+                files={"file": (uploaded_file.name, uploaded_file.getvalue(), "text/csv")},
+                headers=auth_headers()
             )
 
             if response.status_code == 200:
                 data = response.json()
                 st.success(f"✅ {data['transactions_count']} transactions uploaded and categorized!")
-                st.rerun()  # Refresh to show new data
+                st.rerun()
             else:
-                st.error(f"❌ Upload failed: {response.json().get('detail', 'Unknown error')}")
+                try:
+                    error_detail = response.json().get('detail', 'Unknown error')
+                except Exception:
+                    error_detail = response.text or f"HTTP {response.status_code}"
+                st.error(f"❌ Upload failed: {error_detail}")
 
         except requests.exceptions.ConnectionError:
             st.error("❌ Cannot connect to FastAPI. Make sure uvicorn is running on port 8000.")
@@ -47,10 +125,9 @@ if uploaded_file:
 st.divider()
 
 # ─── Always fetch fresh data ──────────────────────────
-@st.cache_data(ttl=10)  # Cache 10s but ttl refreshes
 def fetch_summary():
     try:
-        res = requests.get(f"{API_BASE}/v1/analysis/summary", headers=st.session_state.get('headers', {}))
+        res = requests.get(f"{API_BASE}/analysis/summary", headers=auth_headers())
         if res.status_code == 200:
             return res.json()
         return None
@@ -78,7 +155,7 @@ if summary:
     # Embed transactions after upload
     if st.button("🔄 Embed for Chat (run after upload)"):
         try:
-            res = requests.post(f"{API_BASE}/v1/chat/embed", headers=st.session_state.get('headers', {}))
+            res = requests.post(f"{API_BASE}/chat/embed", headers=auth_headers())
             st.success(res.json()['message'])
         except:
             st.error("Embed failed - no auth or no transactions")
@@ -87,7 +164,7 @@ if summary:
     st.markdown("### 🤖 AI Chat")
     try:
         from components.chat_component import chat_interface
-        chat_interface(API_BASE, st.session_state.get('jwt_token', ''))
+        chat_interface(API_BASE, st.session_state.jwt_token)
     except ImportError:
         st.info("Chat component ready - Phase 5 integration next!")
 
@@ -118,7 +195,7 @@ if summary:
     with col_right:
         st.markdown("#### 📈 Monthly Trend")
         try:
-            trend_res = requests.get(f"{API_BASE}/analysis/monthly")
+            trend_res = requests.get(f"{API_BASE}/analysis/monthly", headers=auth_headers())
             if trend_res.status_code == 200:
                 trend_data = trend_res.json().get("monthly_trend", [])
                 if trend_data:
@@ -145,7 +222,6 @@ if summary:
     # Transactions Table
     st.markdown("### 🧾 Transactions")
 
-    # Filters
     f_col1, f_col2 = st.columns(2)
     with f_col1:
         category_filter = st.selectbox(
@@ -155,7 +231,6 @@ if summary:
     with f_col2:
         type_filter = st.selectbox("Filter by Type", ["All", "credit", "debit"])
 
-    # Build query params
     params = {"page": 1, "page_size": 50}
     if category_filter != "All":
         params["category"] = category_filter
@@ -163,7 +238,7 @@ if summary:
         params["type"] = type_filter
 
     try:
-        txn_res = requests.get(f"{API_BASE}/analysis/transactions", params=params)
+        txn_res = requests.get(f"{API_BASE}/analysis/transactions", params=params, headers=auth_headers())
         if txn_res.status_code == 200:
             txn_data = txn_res.json()
             df_txn = pd.DataFrame(txn_data["transactions"])
@@ -177,14 +252,12 @@ if summary:
 
     st.divider()
 
-    # Reset button
     if st.button("🔄 Upload a new file"):
         st.session_state.uploaded = False
         st.session_state.summary = None
         st.rerun()
 
 else:
-    # Placeholder before upload
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Total Income", "₹0")
